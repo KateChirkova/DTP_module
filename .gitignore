@@ -1,0 +1,22 @@
+# СКРИНШОТЫ КОМПАНИИ
+data/
+screenshots/
+*.jpg
+*.jpeg
+*.png
+
+# YOLO МОДЕЛИ
+*.pt
+*.pkl
+
+# ПАРОЛИ
+.env
+*.key
+
+# venv
+venv*/
+__pycache__/
+
+# Frontend
+node_modules/
+.next/

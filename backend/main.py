@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-app = FastAPI(title="🚗 Модуль ДТП ЦОДД")
+app = FastAPI(title="Модуль ДТП")
 
 @app.get("/")
 def root():

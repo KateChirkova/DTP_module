@@ -1,22 +1,60 @@
-# СКРИНШОТЫ КОМПАНИИ
-data/
-screenshots/
-*.jpg
-*.jpeg
-*.png
-
-# YOLO МОДЕЛИ
-*.pt
-*.pkl
-
-# ПАРОЛИ
-.env
-*.key
-
-# venv
+# Виртуальные окружения
 venv*/
-__pycache__/
+.env
+.venv/
+env/
 
-# Frontend
-node_modules/
-.next/
+# Python байткод и кэш
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.coverage
+.cache
+.hypothesis/
+.ruff_cache/
+.htmlcov/
+
+# База данных
+data/database.sqlite*
+data/*.db*
+*.db-wal
+*.db-shm
+
+# ML модели (большие файлы)
+ml/runs/
+ml/weights/
+ml/*.pt
+ml/*.yaml
+static/models/*.pt
+yolov8n.pt
+
+# Логи
+logs/
+*.log
+
+# IDE (оставляем settings для команды)
+.idea/
+.vscode/settings.json
+.vscode/launch.json
+*.swp
+
+# Docker
+.dockerignore
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Личные файлы (НЕ коммитим отчёты!)
+*.docx
+Otchet_dlia_II.docx
+*.pdf
+
+# Git
+.gitignore.bak

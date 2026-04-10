@@ -4,14 +4,13 @@ venv*/
 .venv/
 env/
 
-# Python байткод и кэш
+# Python байткод/кэш/тесты
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
 *.pyo
 *.pyd
-.Python
 .pytest_cache/
 .mypy_cache/
 .coverage
@@ -21,24 +20,43 @@ __pycache__/
 .htmlcov/
 
 # База данных
-data/database.sqlite*
+data/database*
 data/*.db*
+data/*.sqlite*
 *.db-wal
 *.db-shm
 
-# ML модели (большие файлы)
+# ML результаты НЕ коммитим
 ml/runs/
-ml/weights/
 ml/*.pt
-ml/*.yaml
-static/models/*.pt
-yolov8n.pt
+ml/*.pkl
+images/
+dataset/images/
+dataset/labels/
+dataset/for_predict/
+dataset/predictions/
+
+# YAML config — ВСЕ уровни!
+!ml/**/*.yaml
+
+# Данные
+*.jpg
+*.jpeg
+*.png
+*.xml
+*.txt
+*.json
+images/
+labels/
+dataset/
+train/
+val/
 
 # Логи
 logs/
 *.log
 
-# IDE (оставляем settings для команды)
+# IDE
 .idea/
 .vscode/settings.json
 .vscode/launch.json
@@ -47,14 +65,15 @@ logs/
 # Docker
 .dockerignore
 
-# OS generated
+# OS
 .DS_Store
 Thumbs.db
 
-# Личные файлы (НЕ коммитим отчёты!)
+# Персоналка
 *.docx
-Otchet_dlia_II.docx
 *.pdf
+passwords*
+secrets*
 
 # Git
 .gitignore.bak

@@ -20,6 +20,7 @@ __pycache__/
 .htmlcov/
 
 # База данных
+data/screenshots/
 data/database*
 data/*.db*
 data/*.sqlite*
@@ -30,6 +31,7 @@ data/*.sqlite*
 ml/runs/
 ml/*.pt
 ml/*.pkl
+!ml/runs/detect/dtp_krasnodar_light9/weights/best.pt
 images/
 dataset/images/
 dataset/labels/
@@ -38,6 +40,24 @@ dataset/predictions/
 
 # YAML config — ВСЕ уровни!
 !ml/**/*.yaml
+
+
+# Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+frontend/*.log
+
+# Frontend зависимости/кэш
+frontend/yarn.lock
+frontend/pnpm-lock.yaml
+frontend/package-lock.json  # ← Только package.json!
+
+# TypeScript
+frontend/*.tsbuildinfo
 
 # Данные
 *.jpg
@@ -77,3 +97,4 @@ secrets*
 
 # Git
 .gitignore.bak
+

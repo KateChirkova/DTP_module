@@ -1,12 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
-from src.traffic_dtp.schemas.auth import LoginRequest
-from src.traffic_dtp.services.auth import create_jwt_token
+from sqlalchemy.orm import Session
+from src.traffic_dtp.db.session import SessionLocal, Base
+from src.traffic_dtp.db.models.user import User
+import hashlib, jwt
+
 router = APIRouter(prefix="/v1/auth")
 
+def get_db():
+    db = SessionLocal()
+    try: yield db
+    finally: db.close()
+
 @router.post("/login")
-async def login(request: LoginRequest):
-    user = db.query(User).filter(User.login == request.login).first()
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(401, "Invalid credentials")
-    token = create_jwt_token({"sub": user.login})
+async def login(login: str, password: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.login == login).first()
+    if not user or hashlib.sha256(password.encode()).hexdigest() != user.password_hash:
+        raise HTTPException(401, "Invalid")
+    token = jwt.encode({"sub": login}, "secret", algorithm="HS256")
     return {"success": True, "token": token, "expires_in": 86400}

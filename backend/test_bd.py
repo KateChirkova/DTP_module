@@ -4,20 +4,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.traffic_dtp.db.session import engine, Base
-print("Engine:", engine.url)  # Должен быть data/database.sqlite
+print("Engine:", engine.url)
 
-print("До импорта моделей:", list(Base.metadata.tables.keys()))  # Должно быть []
+print("До импорта моделей:", list(Base.metadata.tables.keys()))
 
-# Импорты ДО create_all!
 try:
     from src.traffic_dtp.db.models.user import User
     print("User импортирована")
 except Exception as e:
     print("User:", e); raise
 
-# Добавь остальные: Detection, Accident...
-
-print("🔍 После импорта:", list(Base.metadata.tables.keys()))  # Должно быть ['user']
+print("После импорта:", list(Base.metadata.tables.keys()))
 
 Base.metadata.create_all(bind=engine)
 print("create_all выполнен")

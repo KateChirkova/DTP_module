@@ -1,5 +1,5 @@
 from .user import User
-from .detections import Detection
+from .detections import Detection  # ← РАЗКОММЕНТИРУЙ
 from .accident import Accident
 from .notification import Notification
 from .user_session import UserSession

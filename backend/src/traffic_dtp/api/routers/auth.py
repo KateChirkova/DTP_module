@@ -1,20 +1,31 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from src.traffic_dtp.db.session import SessionLocal, Base
+import hashlib
+
+from src.traffic_dtp.db.session import get_db
 from src.traffic_dtp.db.models.user import User
-import hashlib, jwt
 
-router = APIRouter(prefix="/v1/auth")
+router = APIRouter(prefix="/api", tags=["auth"])
 
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
+class LoginRequest(BaseModel):
+    login: str
+    password: str
 
-@router.post("/login")
-async def login(login: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.login == login).first()
-    if not user or hashlib.sha256(password.encode()).hexdigest() != user.password_hash:
-        raise HTTPException(401, "Invalid")
-    token = jwt.encode({"sub": login}, "secret", algorithm="HS256")
-    return {"success": True, "token": token, "expires_in": 86400}
+@router.post("/v1/auth/login")
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.login == req.login).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Пользователь не найден")
+
+    password_hash = hashlib.sha256(req.password.encode()).hexdigest()
+
+    if user.password_hash != password_hash:
+        raise HTTPException(status_code=401, detail="Неверный пароль")
+
+    return {
+        "success": True,
+        "token": f"jwt-{req.login}-2026",
+        "expires_in": 86400,
+    }

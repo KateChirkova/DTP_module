@@ -1,47 +1,56 @@
 import json
-import sys
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
 from ultralytics import YOLO
-from fastapi import HTTPException
 
-# ПУТИ
-MODEL_PATH = Path("../backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light9/weights/best.pt").resolve()
-DATA_PATH = Path("../../akaito_dtp/data/screenshots").resolve()  # ← Ваши скриншоты
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "ml" / "runs" / "detect" / "dtp_krasnodar_light9" / "weights" / "best.pt"
 
+_model = None
 
-def predict_accident(image_path: Optional[str] = None) -> Dict:
+def get_model() -> YOLO:
+    global _model
+    if _model is None:
+        if not MODEL_PATH.exists():
+            raise FileNotFoundError(f"Модель не найдена: {MODEL_PATH}")
+        _model = YOLO(str(MODEL_PATH))
+    return _model
 
-    if image_path is None:
-        images = list(DATA_PATH.glob("*.jpg")) + list(DATA_PATH.glob("*.png"))
-        if not images:
-            raise HTTPException(status_code=404, detail=f"Изображения не найдены в {DATA_PATH}")
-        image_path = str(images[0])
-    else:
-        image_path = str(Path(image_path).resolve())
+def predict_accident(image_path: str) -> Dict:
+    img_path = Path(image_path).resolve()
 
-    if not Path(image_path).exists():
-        raise HTTPException(status_code=404, detail=f"Изображение не найдено: {image_path}")
-    if not MODEL_PATH.exists():
-        raise HTTPException(status_code=404, detail=f"Модель не найдена: {MODEL_PATH}")
+    if not img_path.exists():
+        raise FileNotFoundError(f"Изображение не найдено: {img_path}")
 
-    model = YOLO(str(MODEL_PATH))
-    results = model(image_path)[0]
+    model = get_model()
+    results = model.predict(source=str(img_path), verbose=False)[0]
 
-    detections = []  # ← МАССИВ всех ДТП!
+    detections: List[Dict] = []
     if results.boxes is not None:
         for box in results.boxes:
+            xyxy = box.xyxy[0].tolist()
             detections.append({
-                "confidence": float(box.conf),
-                "bbox_x1": int(box.xyxy[0][0]),
-                "bbox_y1": int(box.xyxy[0][1]),
-                "bbox_x2": int(box.xyxy[0][2]),
-                "bbox_y2": int(box.xyxy[0][3])
+                "confidence": float(box.conf[0]) if hasattr(box.conf, "__len__") else float(box.conf),
+                "bbox_x1": int(xyxy[0]),
+                "bbox_y1": int(xyxy[1]),
+                "bbox_x2": int(xyxy[2]),
+                "bbox_y2": int(xyxy[3]),
             })
 
     return {
         "status": "success",
-        "image_path": image_path,
+        "image_path": str(img_path),
         "total_detections": len(detections),
-        "detections": detections  # ← МАССИВ объектов!
+        "detections": detections,
     }
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("image_path")
+    args = parser.parse_args()
+
+    result = predict_accident(args.image_path)
+    print(json.dumps(result, ensure_ascii=False))

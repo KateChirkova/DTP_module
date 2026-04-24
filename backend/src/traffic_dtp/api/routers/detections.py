@@ -1,63 +1,85 @@
-# routers/detections.py
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from src.traffic_dtp.db.models import Detection, Accident
 from sqlalchemy.orm import Session
-from src.traffic_dtp.db.session import get_db
-from typing import List
 from pathlib import Path
-import json
-from src.traffic_dtp.services.yolo_predict import predict_accident # subprocess
+import os
+from dotenv import load_dotenv
+
+from src.traffic_dtp.db.session import get_db
+from src.traffic_dtp.services.yolo_service import predict_accident
 from src.traffic_dtp.services.accident_processor import process_screenshot_detections
-manager = None
+from src.traffic_dtp.services.notifications import create_notification
+from src.traffic_dtp.api.routers.ws import manager  # ✅ Broadcast
+
+load_dotenv()
 
 router = APIRouter(prefix="/api", tags=["detections"])
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", "."))
+SCREENSHOTS_PATH = os.getenv("SCREENSHOTS_PATH", "data/screenshots")
 
 
 class ScreenshotPath(BaseModel):
-    screenshot_path: str # "data/screenshots/1234567890.png"
+    screenshot_path: str
 
 
 @router.post("/v1/detections")
 async def process_screenshot(request: ScreenshotPath, db: Session = Depends(get_db)):
-    screenshot_path = Path(request.screenshot_path)
+    screenshot_path = request.screenshot_path.replace("\\", "/")
+    filename = Path(screenshot_path).name
+    relative_path = f"{SCREENSHOTS_PATH}/{filename}" if not screenshot_path.startswith(
+        SCREENSHOTS_PATH) else screenshot_path
+    full_path = PROJECT_ROOT / relative_path
 
-    print(f"📁 Screenshot: {screenshot_path}")
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail=f"Скриншот '{filename}' не найден: {full_path}")
 
-    if not screenshot_path.exists():
-        raise HTTPException(404, f"Скриншот не найден: {screenshot_path}")
+    print(f"📸 Processing: {full_path}")
 
-    # YOLO
-    print("Запуск YOLO")
-    yolo_result = predict_accident(str(screenshot_path))
-    print(f"YOLO РЕЗУЛЬТАТ: {yolo_result}")
-
-
+    # ✅ YOLO предсказание
+    yolo_result = predict_accident(str(full_path))
     detections = yolo_result.get("detections", [])
-    print(f"Детекций найдено: {len(detections)}") # Лог 4
+    print(f"YOLO found {len(detections)} detections")
 
     if not detections:
         return {
-        "success": True,
-        "message": "YOLO не нашёл ДТП",
-        "yolo_raw": yolo_result,
-        "detections": 0
+            "success": True,
+            "message": "YOLO не нашёл ДТП",
+            "detections_found": 0,
+            "filename": filename
         }
 
-# Processor
-    print("Обработка accidents") # Лог 5
     result = process_screenshot_detections(db, detections)
-    print(f"PROCESSOR РЕЗУЛЬТАТ: {result}") # Лог 6
+    print(f"🚀 NEW={result.get('new_accidents', [])} UPDATED={result.get('updated_accidents', [])}")
 
-# WS (только если есть новые)
-    for acc_id in result.get("new_accidents", []):
-        print(f"NEW accident #{acc_id}")
-    #await manager.broadcast({"event": "newaccident", "data": {"id": acc_id}})
+    new_accs = result.get("new_accidents", [])
+    updated_accs = result.get("updated_accidents", [])
+    resolved_accs = result.get("resolved_accidents", [])
 
+    for acc_id in new_accs + updated_accs:
+        create_notification(db, acc_id)
+
+    for acc_id in new_accs:
+        await manager.broadcast({
+            "event": "newaccident",
+            "data": {"id": acc_id, "status": "active"}
+        })
+    for acc_id in updated_accs:
+        await manager.broadcast({
+            "event": "accidentupdated",
+            "data": {"id": acc_id}
+        })
+    for acc_id in resolved_accs:
+        await manager.broadcast({
+            "event": "accidentresolved",
+            "data": {"id": acc_id}
+        })
+
+    db.commit()
     return {
         "success": True,
-        "screenshot": str(screenshot_path),
+        "filename": filename,
         "detections_found": len(detections),
-        "yolo_sample": detections[0] if detections else None, # Первая детекция
-        **result
-}
+        "new_accidents": len(new_accs),
+        "updated_accidents": len(updated_accs),
+        "resolved_accidents": len(resolved_accs)
+    }

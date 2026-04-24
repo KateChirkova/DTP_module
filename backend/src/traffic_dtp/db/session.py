@@ -1,21 +1,25 @@
-from pathlib import Path
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
+from pathlib import Path
+import os
 
-class Base(DeclarativeBase):
-    pass
+load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-DB_FILE = PROJECT_ROOT / "data" / "database.sqlite"
+BASE_DIR = Path(__file__).parent.parent.parent.parent.parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True, parents=True)
 
-engine = create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
+DATABASE_URL = f"sqlite:///{DATA_DIR}/database.sqlite"
+print(f"🗄️ DB путь: {DATA_DIR.absolute()}/database.sqlite")  # Лог!
 
-class Base(DeclarativeBase):
-    pass
+connect_args = {"check_same_thread": False}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 def get_db():
-
     db = SessionLocal()
     try:
         yield db

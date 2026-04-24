@@ -1,131 +1,88 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import time
+import os
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from src.traffic_dtp.db.session import SessionLocal, engine, Base, get_db
-from src.traffic_dtp.db.models.user import User
-from src.traffic_dtp.api.routers.detections import router as detections_router  # ← ТВОЙ ROUTERS!
-from typing import List
-import json
-from datetime import datetime
-import hashlib
+from src.traffic_dtp.api.routers.ws import manager
 
-# WebSocket Manager
-connected_clients = []
+from src.traffic_dtp.db.session import get_db
 
+# Routers
+from src.traffic_dtp.api.routers.detections import router as detections_router
+from src.traffic_dtp.api.routers.notifications import router as notifications_router
+from src.traffic_dtp.api.routers.ws import router as ws_router
+from src.traffic_dtp.api.routers.accidents import router as accidents_router
+from src.traffic_dtp.api.routers.auth import router as auth_router
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections = []
+load_dotenv()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+app = FastAPI(
+    title="Traffic Krasnodar DTP API",
+    version="2.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        disconnected = []
-        for client in self.active_connections:
-            try:
-                await client.send_text(json.dumps(message))
-            except:
-                disconnected.append(client)
-        for client in disconnected:
-            self.active_connections.remove(client)
-
-
-manager = ConnectionManager()
-
-# FastAPI app
-app = FastAPI(title="Traffic Krasnodar DTP API", version="2.0")
-
+# CORS
+origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080"],
+    allow_origins=[o.strip() for o in origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключение routers
-app.include_router(detections_router)  # /api/v1/detections
+app.include_router(detections_router)
+app.include_router(notifications_router)
+app.include_router(accidents_router)
+app.include_router(auth_router)
+app.include_router(ws_router)
 
 
-# WebSocket
-@app.websocket("/api/v1/ws/notifications")
-async def websocket_notifications(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-
-# Login
-@app.post("/api/v1/auth/login")
-async def login(req: dict, db: Session = Depends(get_db)):  # dict вместо BaseModel
-    user = db.query(User).filter(User.login == req.get("login")).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Пользователь не найден")
-
-    password_hash = hashlib.sha256(req.get("password", "").encode()).hexdigest()
-
-    if user.password_hash == password_hash:
-        return {"success": True, "token": f"jwt-{req.get('login')}-2026", "expires_in": 86400}
-    raise HTTPException(status_code=401, detail="Неверный пароль")
-
-
-# Активные ДТП
-@app.get("/api/v1/accidents")
-async def get_accidents(db: Session = Depends(get_db), limit: int = 10):
-    accidents = db.query(Detection).join(Accident).filter(
-        Accident.status == "active"
-    ).order_by(Detection.id.desc()).limit(limit).all()
-
-    return {
-        "success": True,
-        "count": len(accidents),
-        "accidents": [{
-            "id": d.id,
-            "confidence": round(d.confidence, 2),
-            "bbox": [d.bboxx1, d.bbxy1, d.bboxx2, d.bboxy2],
-            "accident_status": d.accident.status if hasattr(d, 'accident') else "unknown"
-        } for d in accidents]
-    }
-
-
-# Health + Debug
-@app.get("/")
-async def root():
-    return {"message": "DTP API v2.0 🚗", "detections": "api/v1/detections READY"}
-
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "detections_route": "WORKING"}
-
-
-@app.get("/debug/routes")
-async def debug_routes():
-    detections_paths = [str(r.path) for r in app.routes if 'detections' in str(r.path)]
-    return {
-        "total_routes": len(app.routes),
-        "detections_paths": detections_paths,
-        "message": "Check logs for /api/v1/detections from routers!"
-    }
-
-
-# Startup
 @app.on_event("startup")
 async def startup():
-    Base.metadata.create_all(bind=engine)
     print("✅ БД готова + routers подключены!")
 
 
-if __name__ == "__main__":
-    import uvicorn
+@app.get("/")
+async def root():
+    return {"message": "DTP API v2.0 🚗", "status": "ok"}
 
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8080, reload=True)
+
+@app.get("/health")
+async def health(db: Session = Depends(get_db)):
+    metrics = {"status": "healthy", "timestamp": time.time(), "database": {}}
+
+    try:
+        # таблицы
+        tables = [row[0] for row in db.execute(text("SELECT name FROM sqlite_master WHERE type='table';")).fetchall()]
+        metrics["database"]["tables"] = tables
+
+        # Counts
+        key_tables = {
+            "detections": "SELECT COUNT(*) FROM detections",
+            "accidents": "SELECT COUNT(*) FROM accidents WHERE is_active=1",  # Только active!
+            "notifications": "SELECT COUNT(*) FROM notifications WHERE status='unread'"
+        }
+
+        for table, query in key_tables.items():
+            if table in tables:
+                count = db.execute(text(query)).scalar()
+                metrics["database"][table] = {"exists": True, "count": count}
+
+        db.commit()
+        return metrics
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/test-ws")
+async def test_broadcast():
+    await manager.broadcast({
+        "event": "newaccident",
+        "data": {"id": 999, "status": "test"}
+    })
+    return {"message": "WS test broadcast sent!"}

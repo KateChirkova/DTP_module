@@ -15,13 +15,12 @@ if user:
     db.commit()
     print("Старый акк удален")
 
-# ✅ Создай новую (SHA256)
 password_hash = hashlib.sha256("123456".encode()).hexdigest()
-print(f"🔑 SHA256 хэш: {password_hash[:20]}...")
+print(f"SHA256 хэш: {password_hash[:20]}...")
 
 user = User(login="kate", password_hash=password_hash)
 db.add(user)
 db.commit()
-print("✅ Kate:123456 (SHA256) создан")
+print("Kate:123456 (SHA256) создан")
 
 db.close()

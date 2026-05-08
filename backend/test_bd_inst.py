@@ -7,4 +7,4 @@ from src.traffic_dtp.db.session import Base as SessionBase
 from src.traffic_dtp.db.models.user import User
 print("Base в session:", id(SessionBase))
 print("Base в User:", id(User.__base__))
-print("Одинаковые?", SessionBase is User.__base__)  # False ← ПРОБЛЕМА!
+print("Одинаковые?", SessionBase is User.__base__)

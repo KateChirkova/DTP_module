@@ -11,7 +11,7 @@ print("User.__tablename__:", getattr(User, '__tablename__', 'НЕТ!'))
 print("Base.metadata.tables:", list(Base.metadata.tables.keys()))
 
 try:
-    User.metadata  # Проверяем регистрацию
+    User.metadata
     print("User ок")
 except Exception as e:
     print("User сломана:", e)

@@ -4,9 +4,8 @@ import time
 from pathlib import Path
 from typing import Dict
 
-# services/ -> traffic_dtp/ -> src/ -> backend/ -> D:\DTP_Akaito
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-print(f"BASE_DIR: {BASE_DIR}")  # Должен быть D:\DTP_Akaito
+print(f"BASE_DIR: {BASE_DIR}")
 
 ML_VENV_PYTHON = BASE_DIR / "backend" / "src" / "traffic_dtp" / "ml" / "venv-ml" / "Scripts" / "python.exe"
 YOLO_SCRIPT = BASE_DIR / "backend" / "src" / "traffic_dtp" / "services" / "yolo_predict.py"
@@ -16,10 +15,10 @@ print(f"Script: {YOLO_SCRIPT.exists()}")
 
 
 def predict_accident(image_path: str) -> Dict:
-    full_image = BASE_DIR / image_path  # Относительно корня
+    full_image = BASE_DIR / image_path
     cmd = [str(ML_VENV_PYTHON), str(YOLO_SCRIPT), str(full_image)]
 
-    print(f"🚀 CMD: {' '.join(cmd)}")
+    print(f"CMD: {' '.join(cmd)}")
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(BASE_DIR))
 

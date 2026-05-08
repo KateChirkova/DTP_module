@@ -13,13 +13,12 @@ def get_accidents(
         limit: int = Query(10, ge=1, le=100),
         status: Optional[str] = Query(
             None,
-            pattern=r"^(created|updated|resolved|all)?$",
-            description="created/updated/resolved/all (пустое=all)"
+            pattern=r"^(new|created|updated|resolved|all)?$",
+            description="new/created/updated/resolved/all (пустое=all)"
         )
 ):
     query = db.query(Accident).filter(Accident.is_active == True)
 
-    # фильтр по статусам
     if status != "all":
         query = query.filter(Accident.event_status == status)
 

@@ -19,7 +19,6 @@ print("После импорта:", list(Base.metadata.tables.keys()))
 Base.metadata.create_all(bind=engine)
 print("create_all выполнен")
 
-# Проверка
 from sqlalchemy import text
 with engine.connect() as conn:
     tables = [row[0] for row in conn.execute(text('SELECT name FROM sqlite_master WHERE type="table";')).fetchall()]

@@ -9,7 +9,6 @@ from src.traffic_dtp.api.routers.ws import manager
 
 from src.traffic_dtp.db.session import get_db
 
-# Routers
 from src.traffic_dtp.api.routers.detections import router as detections_router
 from src.traffic_dtp.api.routers.notifications import router as notifications_router
 from src.traffic_dtp.api.routers.ws import router as ws_router
@@ -25,7 +24,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -44,12 +42,12 @@ app.include_router(ws_router)
 
 @app.on_event("startup")
 async def startup():
-    print("✅ БД готова + routers подключены!")
+    print("БД готова + routers подключены!")
 
 
 @app.get("/")
 async def root():
-    return {"message": "DTP API v2.0 🚗", "status": "ok"}
+    return {"message": "DTP API v2.0", "status": "ok"}
 
 
 @app.get("/health")
@@ -57,14 +55,12 @@ async def health(db: Session = Depends(get_db)):
     metrics = {"status": "healthy", "timestamp": time.time(), "database": {}}
 
     try:
-        # таблицы
         tables = [row[0] for row in db.execute(text("SELECT name FROM sqlite_master WHERE type='table';")).fetchall()]
         metrics["database"]["tables"] = tables
 
-        # Counts
         key_tables = {
             "detections": "SELECT COUNT(*) FROM detections",
-            "accidents": "SELECT COUNT(*) FROM accidents WHERE is_active=1",  # Только active!
+            "accidents": "SELECT COUNT(*) FROM accidents WHERE is_active=1",
             "notifications": "SELECT COUNT(*) FROM notifications WHERE status='unread'"
         }
 

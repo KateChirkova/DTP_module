@@ -1,9 +1,7 @@
-# В api/main.py → /v1/detections
 from typing import Optional
 
 
 def find_or_create_accident(detection: Detection, db: Session) -> Accident:
-    # Поиск похожих по bbox (IoU > 0.5)
     similar = db.query(Detection).filter(
         Detection.bboxx1.between(detection.bboxx1 - 50, detection.bboxx1 + 50),
         Detection.bbxy1.between(detection.bbxy1 - 50, detection.bbxy1 + 50)
@@ -16,7 +14,6 @@ def find_or_create_accident(detection: Detection, db: Session) -> Accident:
             detection.accident_id = accident.id
             return accident
 
-    # Новый accident
     accident = Accident(confidence=detection.confidence, bbox_center_x=(detection.bboxx1 + detection.bboxx2) / 2)
     db.add(accident)
     db.flush()
@@ -26,7 +23,6 @@ def find_or_create_accident(detection: Detection, db: Session) -> Accident:
 
 
 def calculate_iou(d1: Detection, d2: Detection) -> float:
-    # IoU bbox
     x1 = max(d1.bboxx1, d2.bboxx1)
     y1 = max(d1.bbxy1, d2.bbxy1)
     x2 = min(d1.bboxx2, d2.bboxx2)

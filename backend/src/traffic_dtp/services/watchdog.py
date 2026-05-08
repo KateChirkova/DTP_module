@@ -25,14 +25,14 @@ class ScreenshotHandler(FileSystemEventHandler):
     def on_created(self, event):
         if not event.is_directory and event.src_path.lower().endswith(('.jpg', '.jpeg', '.png')):
             filename = Path(event.src_path).name
-            print(f"Новый скриншот: {filename}") # При запросе писать только имя файла
+            print(f"Новый скриншот: {filename}")
 
             time.sleep(2)
 
             try:
                 payload = {"screenshot_path": filename}
 
-                print(f"🚀 Отправляем: {payload}")
+                print(f"Отправляем: {payload}")
                 response = requests.post(API_URL, json=payload, timeout=30)
                 response.raise_for_status()
 

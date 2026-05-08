@@ -11,7 +11,7 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True, parents=True)
 
 DATABASE_URL = f"sqlite:///{DATA_DIR}/database.sqlite"
-print(f"🗄️ DB путь: {DATA_DIR.absolute()}/database.sqlite")  # Лог!
+print(f"DB путь: {DATA_DIR.absolute()}/database.sqlite")
 
 connect_args = {"check_same_thread": False}
 engine = create_engine(DATABASE_URL, connect_args=connect_args)

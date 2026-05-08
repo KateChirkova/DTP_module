@@ -1,20 +1,34 @@
 from sqlalchemy.orm import Session
-from src.traffic_dtp.db.models import Notification, Accident
+from src.traffic_dtp.db.models import Notification, Accident, User
 
-def create_notification(db: Session, accident_id: int, event_type: str = "new") -> Notification:
-    accident = db.query(Accident).filter(Accident.id == accident_id, Accident.is_active == True).first()
+
+def create_notification(db: Session, accident_id: int) -> list[Notification]:
+    accident = db.query(Accident).filter(
+        Accident.id == accident_id,
+        Accident.is_active == True
+    ).first()
+
     if not accident:
-        print(f"No active accident {accident_id}")
-        return None
+        return []
 
-    db.query(Notification).filter(Notification.accident_id == accident_id, Notification.status == "unread").delete()
+    users = db.query(User).all()
+    notifications = []
 
-    notification = Notification(
-        accident_id=accident_id,
-        status="unread",
-        is_sent=True,
-    )
-    db.add(notification)
+    for user in users:
+        db.query(Notification).filter(
+            Notification.accident_id == accident_id,
+            Notification.user_login == user.login,
+            Notification.status == "unread"
+        ).delete()
+
+        notification = Notification(
+            accident_id=accident_id,
+            user_login=user.login,
+            status="unread",
+            is_sent=True,
+        )
+        db.add(notification)
+        notifications.append(notification)
+
     db.flush()
-    print(f"Notification created for accident {accident_id}")
-    return notification
+    return notifications

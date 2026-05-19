@@ -1,0 +1,29 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+# Браузер ходит на опубликованный порт API на хосте (не docker-internal hostname).
+ARG NEXT_PUBLIC_API_BASE=http://localhost:8080
+ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE
+
+COPY frontend/package.json ./
+RUN npm install
+
+COPY frontend .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/next.config.js ./
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

@@ -1,0 +1,65 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/*.pyc
+.venv
+venv
+env
+# Локальные venv (не рантайм-образ)
+backend/src/traffic_dtp/ml/venv-ml
+**/venv-ml
+venv-api
+**/venv-api
+
+# Обучение модели: выборки train/val, разметка, конвертеры, train_n_check — в контейнере инференса не используются
+backend/src/traffic_dtp/ml/dataset
+backend/src/traffic_dtp/ml/train_n_check
+backend/src/traffic_dtp/ml/converts
+backend/src/traffic_dtp/ml/train
+backend/src/traffic_dtp/ml/val
+
+node_modules
+frontend/node_modules
+frontend/.next
+frontend/out
+
+# Скриншоты для watchdog — это рабочие кадры; в Docker они приходят из тома (…/dtp_data -> /app/data/screenshots),
+# а не из образа. Исключаем локальные **/screenshots и data/ только из *контекста сборки*, чтобы не гонять гигабайты в docker build.
+data
+backend/data
+**/screenshots
+
+# Старые прогоны YOLO (не light9) — в рантайме вес только из dtp_krasnodar_light9
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light2/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light3/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light4/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light5/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light6/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light7/
+backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light8/
+
+*.log
+.idea
+.vscode
+
+# Тесты в образ не копируются — меньше контекст сборки
+tests/
+
+# Тяжёлые артефакты, если лежат у вас на диске (git их может не отслеживать)
+**/*.pt
+!backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light9/weights/best.pt
+**/*.pth
+**/*.onnx
+**/*.zip
+**/*.7z
+**/*.tar.gz
+# Картинки только под backend (во frontend ресурсы не трогаем)
+backend/**/*.jpg
+backend/**/*.jpeg
+backend/**/*.png
+
+# Локальные кэши ML
+**/.ultralytics
+**/wandb

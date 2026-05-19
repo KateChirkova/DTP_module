@@ -1,93 +1,147 @@
 "use client"
 
-import { useEffect } from "react"
+// боковая панель уведомлений (live API или demo)
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { useNotifications } from "@/hooks/use-notifications"
+import type { Notification } from "@/hooks/use-notifications"
+import { formatDateMoscow, formatTimeMoscow } from "@/lib/datetime"
+import { dismissAllToasts } from "@/lib/ui-events"
 
-interface NotificationDrawerProps {
+type NotificationDrawerLiveProps = {
+  demo?: false
   children: React.ReactNode
-  refresh?: () => void
+  notifications: Notification[]
+  unreadCount: number
+  isLoading: boolean
+  markRead: (id: number) => Promise<void>
+  markAllRead: () => Promise<void>
+  refresh?: () => Promise<void>
 }
 
-const API_BASE = "http://127.0.0.1:8080"
+type NotificationDrawerDemoProps = {
+  demo: true
+  children: React.ReactNode
+  demoUnreadCount?: number
+  demoEmptyMessage?: string
+}
 
-export function NotificationDrawer({ children }: NotificationDrawerProps) {
-  const { notifications, unreadCount, isLoading, refresh } = useNotifications()
+export type NotificationDrawerProps = NotificationDrawerLiveProps | NotificationDrawerDemoProps
 
-  const markRead = async (id: number) => {
-    await fetch(`${API_BASE}/api/v1/notifications/${id}/read`, { method: "PUT" })
-    refresh()
-  }
-
-  const markAllRead = async () => {
-    await Promise.all(
-      notifications
-        .filter((n) => n.status === "unread")
-        .map((n) => fetch(`${API_BASE}/api/v1/notifications/${n.id}/read`, { method: "PUT" }))
-    )
-    refresh()
-  }
-
-  useEffect(() => {
-    const interval = setInterval(refresh, 5000)
-    return () => clearInterval(interval)
-  }, [refresh])
-
+function DrawerPanel({
+  unreadCount,
+  isLoading,
+  notifications,
+  markRead,
+  onMarkAllRead,
+  demo,
+  demoEmptyMessage,
+}: {
+  unreadCount: number
+  isLoading: boolean
+  notifications: Notification[]
+  markRead?: (id: number) => Promise<void>
+  onMarkAllRead?: () => void
+  demo?: boolean
+  demoEmptyMessage?: string
+}) {
   return (
-    <Drawer direction="right">
-      <DrawerTrigger asChild>{children}</DrawerTrigger>
-      <DrawerContent className="dtp-drawer">
-        <div className="dtp-drawer__wrap">
-          <div className="dtp-drawer__header">
-            <h3 className="dtp-drawer__title">ДТП</h3>
-            <div className="dtp-drawer__actions">
-              <Badge className="dtp-drawer__badge">{unreadCount}</Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="dtp-drawer__markall"
-                onClick={markAllRead}
-                disabled={!notifications.length || unreadCount === 0}
-              >
-                Прочитать
-              </Button>
-            </div>
-          </div>
-          <div className="dtp-drawer__list">
-            {isLoading ? (
-              <div className="dtp-drawer__empty">Загрузка…</div>
-            ) : notifications.length === 0 ? (
-              <div className="dtp-drawer__empty">Пока пусто</div>
-            ) : (
-              notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={
-                    notification.status === "unread"
-                      ? "dtp-drawer__item dtp-drawer__item--unread"
-                      : "dtp-drawer__item"
-                  }
-                  onClick={() => notification.status === "unread" && markRead(notification.id)}
-                >
-                  <div className="dtp-drawer__itemTop">
-                    <span className="dtp-drawer__itemTitle">ДТП #{notification.accident_id}</span>
-                    {notification.status === "unread" && (
-                      <Badge className="dtp-drawer__new">Новое</Badge>
-                    )}
-                  </div>
-                  <div className="dtp-drawer__itemMeta">
-                    {notification.created_at
-                      ? new Date(notification.created_at).toLocaleString("ru-RU")
-                      : ""}
-                  </div>
-                </div>
-              ))
-            )}
+    <DrawerContent className="dtp-drawer">
+      <div className="dtp-drawer__wrap">
+        <div className="dtp-drawer__header">
+          <p className="dtp-drawer__title">Уведомления</p>
+          <div className="dtp-drawer__actions">
+            <Badge className="dtp-drawer__badge">{unreadCount}</Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="dtp-drawer__markall"
+              onClick={onMarkAllRead}
+              disabled={unreadCount === 0 || demo}
+            >
+              Прочитать все
+            </Button>
           </div>
         </div>
-      </DrawerContent>
+        <div className="dtp-drawer__list">
+          {demo ? (
+            <div className="dtp-drawer__empty">{demoEmptyMessage}</div>
+          ) : isLoading ? (
+            <div className="dtp-drawer__empty">Загрузка…</div>
+          ) : notifications.length === 0 ? (
+            <div className="dtp-drawer__empty">Пока пусто</div>
+          ) : (
+            notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`dtp-drawer__item ${
+                  notification.status === "unread" ? "dtp-drawer__item--unread" : ""
+                }`}
+                onClick={() =>
+                  notification.status === "unread" && markRead?.(notification.id)
+                }
+              >
+                <div className="dtp-drawer__itemContent">
+                  <span className="dtp-drawer__itemTitle">
+                    ДТП: {formatTimeMoscow(notification.created_at)}
+                  </span>
+                  <div className="dtp-drawer__itemMeta">
+                    {formatDateMoscow(notification.created_at)}
+                  </div>
+                </div>
+                {notification.status === "unread" && (
+                  <Badge className="dtp-drawer__new">Новое</Badge>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </DrawerContent>
+  )
+}
+
+export function NotificationDrawer(props: NotificationDrawerProps) {
+  if (props.demo) {
+    const unreadCount = props.demoUnreadCount ?? 2
+    return (
+      <Drawer direction="right">
+        <DrawerTrigger asChild>{props.children}</DrawerTrigger>
+        <DrawerPanel
+          unreadCount={unreadCount}
+          isLoading={false}
+          notifications={[]}
+          demo
+          demoEmptyMessage={
+            props.demoEmptyMessage ??
+            "Демо: здесь будет список уведомлений из вашего API"
+          }
+        />
+      </Drawer>
+    )
+  }
+
+  // при открытии — убрать toast и подтянуть список
+  const handleOpenChange = (open: boolean) => {
+    dismissAllToasts()
+    if (open && props.refresh) void props.refresh()
+  }
+
+  const handleMarkAllRead = () => {
+    dismissAllToasts()
+    void props.markAllRead()
+  }
+
+  return (
+    <Drawer direction="right" onOpenChange={handleOpenChange}>
+      <DrawerTrigger asChild>{props.children}</DrawerTrigger>
+      <DrawerPanel
+        unreadCount={props.unreadCount}
+        isLoading={props.isLoading}
+        notifications={props.notifications}
+        markRead={props.markRead}
+        onMarkAllRead={handleMarkAllRead}
+      />
     </Drawer>
   )
 }

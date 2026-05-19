@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from src.traffic_dtp.db.session import Base
 
 
+# агрегат ДТП: bbox, жизненный цикл, связь с детекциями и уведомлениями
 class Accident(Base):
     __tablename__ = "accidents"
 
@@ -22,7 +23,7 @@ class Accident(Base):
     status_updated_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
-    event_status = Column(String(20), default="created")
+    event_status = Column(String(20), default="new")
     is_active = Column(Boolean, default=True)
 
     detections = relationship("Detection", back_populates="accident")

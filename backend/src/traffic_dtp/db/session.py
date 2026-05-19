@@ -1,12 +1,13 @@
+# SQLite engine и фабрика сессий для FastAPI Depends(get_db)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
 from pathlib import Path
 import os
 
-load_dotenv()
+from src.traffic_dtp.services.paths import load_project_dotenv
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent.parent
+load_project_dotenv()
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True, parents=True)
 

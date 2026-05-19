@@ -1,3 +1,4 @@
+# валидация обученных весов на val-сплите
 from ultralytics import YOLO
 
 model = YOLO("backend/src/traffic_dtp/ml/runs/detect/dtp_krasnodar_light9/weights/best.pt")

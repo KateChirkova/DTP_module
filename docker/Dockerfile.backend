@@ -1,0 +1,33 @@
+FROM python:3.11-slim
+
+# OpenCV / ultralytics runtime (headless)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libglib2.0-0 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY backend/requirements-docker.txt /tmp/requirements-docker.txt
+# CPU-only torch (без гигабайт CUDA) -> меньше образ и быстрее сборка на обычном ПК.
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir --default-timeout=180 --retries 15 \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir --default-timeout=180 --retries 15 \
+        -r /tmp/requirements-docker.txt \
+    && pip uninstall -y opencv-python opencv-contrib-python 2>/dev/null || true \
+    && pip install --no-cache-dir --force-reinstall "opencv-python-headless>=4.8,<5"
+
+COPY docker/backend-entrypoint.sh /app/docker/backend-entrypoint.sh
+# CRLF с Windows-хоста ломает shebang в Linux-контейнере
+RUN sed -i 's/\r$//' /app/docker/backend-entrypoint.sh && chmod +x /app/docker/backend-entrypoint.sh
+
+COPY backend /app/backend
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/backend
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/docker/backend-entrypoint.sh"]

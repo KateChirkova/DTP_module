@@ -1,10 +1,8 @@
-# Виртуальные окружения
 venv*/
 .env
 .venv/
 env/
 
-# Python байткод/кэш/тесты
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,7 +17,6 @@ __pycache__/
 .ruff_cache/
 .htmlcov/
 
-# База данных
 data/screenshots/
 data/database*
 data/*.db*
@@ -27,7 +24,6 @@ data/*.sqlite*
 *.db-wal
 *.db-shm
 
-# ML результаты НЕ коммитим
 ml/runs/
 ml/*.pt
 ml/*.pkl
@@ -38,11 +34,9 @@ dataset/labels/
 dataset/for_predict/
 dataset/predictions/
 
-# YAML config — ВСЕ уровни!
 !ml/**/*.yaml
 
 
-# Frontend
 node_modules/
 frontend/node_modules/
 frontend/dist/
@@ -50,21 +44,22 @@ frontend/build/
 frontend/.next/
 frontend/out/
 frontend/*.log
+frontend/playwright-report/
+frontend/test-results/
 
-# Frontend зависимости/кэш
 frontend/yarn.lock
 frontend/pnpm-lock.yaml
-frontend/package-lock.json  # ← Только package.json!
+frontend/package-lock.json
 
-# TypeScript
 frontend/*.tsbuildinfo
 
-# Данные
 *.jpg
 *.jpeg
 *.png
+!frontend/e2e/**/*-snapshots/**/*.png
 *.xml
 *.txt
+!backend/requirements-docker.txt
 *.json
 images/
 labels/
@@ -72,29 +67,21 @@ dataset/
 train/
 val/
 
-# Логи
 logs/
 *.log
 
-# IDE
 .idea/
 .vscode/settings.json
 .vscode/launch.json
 *.swp
 
-# Docker
-.dockerignore
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Персоналка
 *.docx
 *.pdf
 passwords*
 secrets*
 
-# Git
 .gitignore.bak
 

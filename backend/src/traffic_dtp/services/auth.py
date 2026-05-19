@@ -1,19 +1,10 @@
+# хеш пароля для user.password_hash (SHA-256)
 import hashlib
-import time
-from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return hashlib.sha256(password.encode()).hexdigest()
+
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-def create_token(login: str) -> str:
-    payload = f"{login}:{int(time.time())}"
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-def verify_token(token: str, login: str) -> bool:
-    expected = create_token(login)
-    return token == expected and (time.time() - int(token[-16:], 16)) < 86400
+    return hash_password(plain) == hashed

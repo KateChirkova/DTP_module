@@ -1,8 +1,15 @@
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List
+
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict
 
 from src.traffic_dtp.db.models import Accident, Detection
+from src.traffic_dtp.services.notifications import delete_notifications_for_accident
+
+# порог совпадения bbox; окно «живого» ДТП; кадров без детекции до закрытия
+IOU_MATCH_THRESHOLD = 0.5
+ACTIVE_WINDOW_HOURS = 12
+MISSED_FRAMES_TO_RESOLVE = 2
 
 
 def calculate_iou(box1: List[int], box2: List[int]) -> float:
@@ -19,18 +26,17 @@ def calculate_iou(box1: List[int], box2: List[int]) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def process_screenshot_detections(db: Session, detections: List[Dict]) -> Dict[str, List[int]]:
-    print(f"process_screenshot_detections: {len(detections)} detections")
-    print(f"First detection: {detections[0] if detections else 'EMPTY'}")
+def _bbox_from_detection(detection: Detection) -> List[int]:
+    return [detection.bbox_x1, detection.bbox_y1, detection.bbox_x2, detection.bbox_y2]
 
-    now = datetime.now(timezone.utc)
-    new_accidents = []
-    updated_accidents = []
-    resolved_accidents = []
 
-    new_detections = []
+def _bbox_from_accident(accident: Accident) -> List[int]:
+    return [accident.bbox_x1, accident.bbox_y1, accident.bbox_x2, accident.bbox_y2]
+
+
+def _save_detections(db: Session, detections: List[Dict]) -> List[Detection]:
+    saved: List[Detection] = []
     for det_data in detections:
-        print(f"Creating Detection: bbox={det_data.get('bbox_x1')}-{det_data.get('bbox_x2')}")
         detection = Detection(
             confidence=det_data["confidence"],
             bbox_x1=det_data["bbox_x1"],
@@ -39,39 +45,47 @@ def process_screenshot_detections(db: Session, detections: List[Dict]) -> Dict[s
             bbox_y2=det_data["bbox_y2"],
         )
         db.add(detection)
-        new_detections.append(detection)
-
+        saved.append(detection)
     db.flush()
-    print(f"{len(new_detections)} Detection сохранены")
+    return saved
 
-    cutoff = now - timedelta(hours=12)
-    active_accidents = (
-        db.query(Accident)
-        .filter(Accident.is_active == True)
-        .filter(Accident.last_seen >= cutoff)
-        .all()
-    )
-    print(f"Active accidents: {len(active_accidents)}")
 
-    matched_accident_ids = set()
+# сопоставление детекции с существующим ДТП по IoU
+def _find_best_matching_accident(
+    bbox_det: List[int],
+    candidates: List[Accident],
+) -> Accident | None:
+    best_accident = None
+    best_iou = 0.0
+    for accident in candidates:
+        iou = calculate_iou(bbox_det, _bbox_from_accident(accident))
+        if iou > best_iou:
+            best_iou = iou
+            best_accident = accident
+    if best_iou <= IOU_MATCH_THRESHOLD:
+        return None
+    return best_accident
+
+
+def _match_detections_to_accidents(
+    db: Session,
+    new_detections: List[Detection],
+    matching_accidents: List[Accident],
+    now: datetime,
+) -> tuple[list[int], list[int], set[int]]:
+    new_accidents: list[int] = []
+    updated_accidents: list[int] = []
+    matched_accident_ids: set[int] = set()
 
     for detection in new_detections:
-        bbox_det = [detection.bbox_x1, detection.bbox_y1, detection.bbox_x2, detection.bbox_y2]
-        print(f"Matching bbox: {bbox_det}")
-
-        matching_accident = None
-        for accident in active_accidents:
-            bbox_acc = [accident.bbox_x1, accident.bbox_y1, accident.bbox_x2, accident.bbox_y2]
-            iou = calculate_iou(bbox_det, bbox_acc)
-            print(f"IoU with accident {accident.id}: {iou:.2f}")
-            if iou > 0.5:
-                matching_accident = accident
-                break
+        bbox_det = _bbox_from_detection(detection)
+        matching_accident = _find_best_matching_accident(bbox_det, matching_accidents)
 
         if matching_accident:
-            print(f"Match accident {matching_accident.id}")
             matching_accident.last_seen = now
-            matching_accident.confidence = max(matching_accident.confidence or 0, detection.confidence)
+            matching_accident.confidence = max(
+                matching_accident.confidence or 0, detection.confidence
+            )
             matching_accident.status_updated_at = now
             matching_accident.missed_screenshots = 0
             matching_accident.event_status = "updated"
@@ -79,35 +93,71 @@ def process_screenshot_detections(db: Session, detections: List[Dict]) -> Dict[s
             matched_accident_ids.add(matching_accident.id)
             updated_accidents.append(matching_accident.id)
         else:
-            print("Creating NEW accident")
             new_accident = Accident(
-                bbox_x1=detection.bbox_x1, bbox_y1=detection.bbox_y1,
-                bbox_x2=detection.bbox_x2, bbox_y2=detection.bbox_y2,
+                bbox_x1=detection.bbox_x1,
+                bbox_y1=detection.bbox_y1,
+                bbox_x2=detection.bbox_x2,
+                bbox_y2=detection.bbox_y2,
                 confidence=detection.confidence,
-                first_seen=now, last_seen=now,
-                event_status="new", is_active=True,
-                missed_screenshots=0, status_updated_at=now
+                first_seen=now,
+                last_seen=now,
+                event_status="new",
+                is_active=True,
+                missed_screenshots=0,
+                status_updated_at=now,
             )
             db.add(new_accident)
             db.flush()
             detection.accident_id = new_accident.id
             new_accidents.append(new_accident.id)
-            print(f"NEW accident ID: {new_accident.id}")
 
-    for accident in active_accidents:
-        if accident.id not in matched_accident_ids:
-            accident.missed_screenshots += 1
-            accident.status_updated_at = now
-            if accident.missed_screenshots >= 2:
-                accident.event_status = "resolved"
-                accident.is_active = False
-                accident.resolved_at = now
-                resolved_accidents.append(accident.id)
-                print(f"Resolved accident {accident.id}")
+    return new_accidents, updated_accidents, matched_accident_ids
 
-    print(f"RESULT: NEW={new_accidents} UPDATED={updated_accidents} RESOLVED={resolved_accidents}")
+
+# фильтр для закрытия ДТП: пропущенные кадры -> resolved
+def _resolve_unmatched_accidents(
+    db: Session,
+    all_active_accidents: List[Accident],
+    matched_accident_ids: set[int],
+    now: datetime,
+) -> list[int]:
+    resolved_accidents: list[int] = []
+    for accident in all_active_accidents:
+        if accident.id in matched_accident_ids:
+            continue
+        accident.missed_screenshots += 1
+        accident.status_updated_at = now
+        if accident.missed_screenshots >= MISSED_FRAMES_TO_RESOLVE:
+            accident.event_status = "resolved"
+            accident.is_active = False
+            accident.resolved_at = now
+            delete_notifications_for_accident(db, accident.id)
+            resolved_accidents.append(accident.id)
+    return resolved_accidents
+
+
+def process_screenshot_detections(db: Session, detections: List[Dict]) -> Dict[str, List[int]]:
+    now = datetime.now(timezone.utc)
+    new_detections = _save_detections(db, detections)
+
+    cutoff = now - timedelta(hours=ACTIVE_WINDOW_HOURS)
+    matching_accidents = (
+        db.query(Accident)
+        .filter(Accident.is_active.is_(True))
+        .filter(Accident.last_seen >= cutoff)
+        .all()
+    )
+    all_active_accidents = db.query(Accident).filter(Accident.is_active.is_(True)).all()
+
+    new_accidents, updated_accidents, matched_ids = _match_detections_to_accidents(
+        db, new_detections, matching_accidents, now
+    )
+    resolved_accidents = _resolve_unmatched_accidents(
+        db, all_active_accidents, matched_ids, now
+    )
+
     return {
-        "new_accidents": new_accidents,
-        "updated_accidents": updated_accidents,
-        "resolved_accidents": resolved_accidents,
+        "new_accidents": list(dict.fromkeys(new_accidents)),
+        "updated_accidents": list(dict.fromkeys(updated_accidents)),
+        "resolved_accidents": list(dict.fromkeys(resolved_accidents)),
     }

@@ -1,0 +1,2 @@
+# Скрипты entrypoint для Linux-образов — только LF (иначе в контейнере падает shebang)
+docker/*.sh text eol=lf

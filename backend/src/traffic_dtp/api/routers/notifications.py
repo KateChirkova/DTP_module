@@ -1,42 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from src.traffic_dtp.api.deps import get_current_user
-from src.traffic_dtp.db.session import get_db
-from src.traffic_dtp.db.models import Notification, Accident, User
-from src.traffic_dtp.api.routers.ws import manager
+import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
+from sqlalchemy.orm import Session
+
+from src.traffic_dtp.api.deps import get_current_user
+from src.traffic_dtp.db.models import Notification, User
+from src.traffic_dtp.db.session import get_db
+from src.traffic_dtp.services.notifications import (
+    active_notifications_query,
+    mark_all_notifications_read,
+    mark_notification_read,
+    push_unread_count_ws,
+    status_for_user,
+    unread_count_for_user,
+)
+from src.traffic_dtp.services.ws_manager import manager
+
+# общие уведомления; прочтение per-user в notification_reads
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 
 
 @router.get("/notifications")
-async def get_notifications(
-        current_user: User = Depends(get_current_user),
-        status: str = Query("unread", pattern="^(unread|read|all)$"),
-        limit: int = Query(20, ge=1, le=100),
-        offset: int = Query(0, ge=0),
-        db: Session = Depends(get_db),
+def get_notifications(
+    current_user: User = Depends(get_current_user),
+    status: str = Query("unread", pattern="^(unread|read|all)$"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
 ):
-    query = (
-        db.query(Notification)
-        .join(Accident, Notification.accident_id == Accident.id)
-        .filter(Notification.user_login == current_user.login)
-        .filter(Accident.is_active == True)
-    )
+    items = active_notifications_query(db).order_by(Notification.id.desc()).all()
 
     if status != "all":
-        query = query.filter(Notification.status == status)
+        items = [
+            n
+            for n in items
+            if status_for_user(db, n, current_user.login) == status
+        ]
 
-    total = query.count()
-    notifications = query.order_by(Notification.id.desc()).offset(offset).limit(limit).all()
-
-    unread_count = (
-        db.query(Notification)
-        .join(Accident)
-        .filter(Notification.user_login == current_user.login)
-        .filter(Notification.status == "unread")
-        .filter(Accident.is_active == True)
-        .count()
-    )
+    total = len(items)
+    page = items[offset : offset + limit]
+    unread_count = unread_count_for_user(db, current_user.login)
 
     return {
         "success": True,
@@ -48,78 +53,41 @@ async def get_notifications(
             {
                 "id": n.id,
                 "accident_id": n.accident_id,
-                "status": n.status,
+                "status": status_for_user(db, n, current_user.login),
                 "accident_status": n.accident.event_status if n.accident else None,
                 "created_at": n.created_at.isoformat() if n.created_at else None,
-                "is_sent": n.is_sent,
             }
-            for n in notifications
+            for n in page
         ],
     }
 
 
 @router.put("/notifications/{notification_id}/read")
-async def mark_notification_read(
-        notification_id: int,
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
+async def mark_notification_read_endpoint(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    notification = (
-        db.query(Notification)
-        .join(Accident, Notification.accident_id == Accident.id)
-        .filter(Notification.id == notification_id)
-        .filter(Notification.user_login == current_user.login)
-        .filter(Accident.is_active == True)
-        .first()
-    )
+    if not mark_notification_read(db, notification_id, current_user.login):
+        raise HTTPException(status_code=404, detail="Уведомление не найдено")
 
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    notification.status = "read"
-    notification.is_sent = True
     db.commit()
-
-    unread_count = (
-        db.query(Notification)
-        .join(Accident)
-        .filter(Notification.user_login == current_user.login)
-        .filter(Notification.status == "unread")
-        .filter(Accident.is_active == True)
-        .count()
-    )
-
-    await manager.send_to_user(current_user.login, {
-        "event": "notifications_updated",
-        "data": {"unread_count": unread_count}
-    })
+    await push_unread_count_ws(db, manager, current_user.login)
 
     return {
         "success": True,
-        "notification_id": notification.id,
-        "status": notification.status,
+        "notification_id": notification_id,
+        "status": "read",
     }
 
 
 @router.put("/notifications/read-all")
-async def mark_all_notifications_read(
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
+async def mark_all_notifications_read_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    db.query(Notification).filter(
-        Notification.user_login == current_user.login,
-        Notification.status == "unread"
-    ).update(
-        {"status": "read", "is_sent": True},
-        synchronize_session=False
-    )
+    mark_all_notifications_read(db, current_user.login)
     db.commit()
+    await push_unread_count_ws(db, manager, current_user.login)
 
-    await manager.send_to_user(current_user.login, {
-        "event": "notifications_updated",
-        "data": {"unread_count": 0}
-    })
-
-    return {
-        "success": True
-    }
+    return {"success": True}

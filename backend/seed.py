@@ -1,13 +1,22 @@
-from src.traffic_dtp.db.session import SessionLocal
-from src.traffic_dtp.db.models.user import User
-from src.traffic_dtp.db.models.accident import Accident
 from datetime import datetime
 
+from src.traffic_dtp.db.models.accident import Accident
+from src.traffic_dtp.db.models.user import User
+from src.traffic_dtp.db.session import SessionLocal
+from src.traffic_dtp.services.auth import hash_password
+
 db = SessionLocal()
-user = User(login="kate", password_hash="$2b$12$...")
+user = User(login="kate", password_hash=hash_password("change-me"))
 db.add(user)
 
-acc = Accident(status="active", first_seen=datetime.now(), last_seen=datetime.now(), geo_lat=55.7558, geo_lon=37.6173, confidence=0.92)
+acc = Accident(
+    status="active",
+    first_seen=datetime.now(),
+    last_seen=datetime.now(),
+    geo_lat=55.7558,
+    geo_lon=37.6173,
+    confidence=0.92,
+)
 db.add(acc)
 db.commit()
 print("Kate + 1 accident")

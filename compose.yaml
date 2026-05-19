@@ -1,0 +1,103 @@
+# Полный стек из корня репозитория:
+#   docker compose up -d --build
+# UI: http://localhost:3000  |  API: http://localhost:8080/docs
+#
+# SQLite — в томе dtp_data; скриншоты — с хоста (положите .png/.jpg в data/screenshots/):
+#   data/screenshots/frame.png  ->  watchdog -> API -> уведомления
+
+x-backend-image: &backend_image dtp-akaito-backend:latest
+x-backend-build: &backend_build
+  context: .
+  dockerfile: docker/Dockerfile.backend
+
+services:
+  yolo-worker:
+    image: *backend_image
+    build: *backend_build
+    entrypoint:
+      - python
+      - -m
+      - traffic_dtp.ml.yolo_worker_server
+    working_dir: /app/backend/src
+    environment:
+      PYTHONPATH: /app/backend/src
+      YOLO_WORKER_PORT: "18081"
+      YOLO_WORKER_BIND: "0.0.0.0"
+    volumes:
+      - dtp_data:/app/data
+      # Тот же bind mount, что у api/watchdog — иначе worker не видит файлы с хоста
+      - ${SCREENSHOTS_HOST_DIR:-./data/screenshots}:/app/data/screenshots
+    expose:
+      - "18081"
+
+  api:
+    image: *backend_image
+    build: *backend_build
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    environment:
+      PROJECT_ROOT: /app
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      YOLO_WORKER_URL: http://yolo-worker:18081
+      DTP_INTERNAL_API_KEY: ${DTP_INTERNAL_API_KEY:-dtp-dev-internal-key-change-in-env}
+      DTP_BOOTSTRAP_LOGIN: ${DTP_BOOTSTRAP_LOGIN:-admin}
+      DTP_BOOTSTRAP_PASSWORD: ${DTP_BOOTSTRAP_PASSWORD:-admin123}
+      DTP_BOOTSTRAP_ADMIN: ${DTP_BOOTSTRAP_ADMIN:-1}
+    volumes:
+      - dtp_data:/app/data
+      - ${SCREENSHOTS_HOST_DIR:-./data/screenshots}:/app/data/screenshots
+    depends_on:
+      - yolo-worker
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  watchdog:
+    image: *backend_image
+    build: *backend_build
+    env_file:
+      - .env
+    entrypoint:
+      - python
+      - -m
+      - src.traffic_dtp.services.watchdog
+    working_dir: /app/backend
+    environment:
+      PYTHONPATH: /app/backend
+      PROJECT_ROOT: /app
+      SCREENSHOTS_PATH: data/screenshots
+      NEXT_PUBLIC_API_BASE: http://api:8080
+      DTP_INTERNAL_API_KEY: ${DTP_INTERNAL_API_KEY:-dtp-dev-internal-key-change-in-env}
+      # inotify не видит файлы с Windows-хоста через bind mount — опрос каталога:
+      WATCHDOG_USE_POLLING: "1"
+    volumes:
+      - dtp_data:/app/data
+      - ${SCREENSHOTS_HOST_DIR:-./data/screenshots}:/app/data/screenshots
+    depends_on:
+      api:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_BASE: http://localhost:8080
+    image: dtp-akaito-frontend:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  dtp_data:

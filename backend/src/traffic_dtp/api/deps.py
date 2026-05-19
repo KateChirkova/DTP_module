@@ -1,47 +1,44 @@
-from fastapi import Depends, HTTPException, Header
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from src.traffic_dtp.db.session import get_db
-from src.traffic_dtp.db.models.user import User
-from src.traffic_dtp.db.models.user_session import UserSession
-import hashlib
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer
-from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+
+from src.traffic_dtp.db.models.user import User
+from src.traffic_dtp.db.session import get_db
+from src.traffic_dtp.services import user_session as session_service
 
 security = HTTPBearer()
 
-def get_current_user(authorization: str = Depends(security), db: Session = Depends(get_db)):
-    raw_token = authorization.credentials
-    print(f"RAW TOKEN: {raw_token}")
 
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    print(f"TOKEN HASH: {token_hash[:16]}...")
-
-    session = db.query(UserSession).filter(
-        and_(
-            UserSession.token_hash == token_hash,
-            UserSession.status == "active"
-        )
-    ).first()
-
-    print(f"Sessions in DB: {db.query(UserSession).filter(UserSession.status == 'active').count()}")
-    print(f"get_current_user: {authorization.credentials[:20]}...")
+# накладка Bearer-токена на пользователя (сессия в БД)
+def _resolve_user_from_token(db: Session, token: str) -> User:
+    session = session_service.find_active_session_by_token(db, token)
 
     if not session:
-        print(f"Session NOT FOUND: {token_hash[:16]}...")
-        raise HTTPException(401, "Сессия недействительна")
+        raise HTTPException(status_code=401, detail="Сессия недействительна")
 
-    now_utc = datetime.utcnow()
-    if session.login_at and (now_utc - session.login_at.replace(tzinfo=None)) > timedelta(hours=24):
-        session.status = "expired"
-        db.commit()
-        print(f"Session EXPIRED: {session.user_login}")
-        raise HTTPException(401, "Сессия истекла (24 часа)")
+    if session_service.is_session_expired(session):
+        session_service.expire_session(db, session)
+        raise HTTPException(status_code=401, detail="Сессия истекла (24 часа)")
 
     user = db.query(User).filter(User.login == session.user_login).first()
     if not user:
-        print(f"User NOT FOUND: {session.user_login}")
-        raise HTTPException(401, "Пользователь не найден")
+        raise HTTPException(status_code=401, detail="Пользователь не найден")
 
-    print(f"get_current_user: {user.login}")
     return user
+
+
+def get_current_user(
+    authorization=Depends(security),
+    db: Session = Depends(get_db),
+) -> User:
+    return _resolve_user_from_token(db, authorization.credentials)
+
+
+def get_current_admin(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Требуются права администратора")
+    return user
+
+
+def get_user_for_ws_token(token: str, db: Session) -> User:
+    return _resolve_user_from_token(db, token)

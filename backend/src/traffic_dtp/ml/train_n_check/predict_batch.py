@@ -1,3 +1,4 @@
+# пакетный инференс: PNG из for_predict -> predictions/
 from ultralytics import YOLO
 from pathlib import Path
 

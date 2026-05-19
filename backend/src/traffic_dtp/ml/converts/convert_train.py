@@ -1,38 +1,16 @@
-import os
+# VOC XML train -> YOLO .txt (размеры кадра из PNG/JPG)
 import glob
-import xml.etree.ElementTree as ET
+import os
+
 import matplotlib.pyplot as plt
+
+from src.traffic_dtp.ml.converts.voc_to_yolo import write_yolo_labels_from_xml
 
 
 def convert_xml_to_yolo(xml_path, img_path, output_path):
     img = plt.imread(img_path)
     img_height, img_width = img.shape[:2]
-
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-
-    objects = root.findall('object')
-    if not objects:
-        open(output_path, 'w').close()
-        return
-
-    with open(output_path, 'w') as f:
-        for obj in objects:
-            class_name = obj.find('name').text
-            class_id = 0
-
-            bndbox = obj.find('bndbox')
-            xmin = float(bndbox.find('xmin').text)
-            ymin = float(bndbox.find('ymin').text)
-            xmax = float(bndbox.find('xmax').text)
-            ymax = float(bndbox.find('ymax').text)
-
-            x_center = ((xmin + xmax) / 2) / img_width
-            y_center = ((ymin + ymax) / 2) / img_height
-            width = (xmax - xmin) / img_width
-            height = (ymax - ymin) / img_height
-
-            f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+    write_yolo_labels_from_xml(xml_path, output_path, img_width, img_height)
 
 
 xml_files = glob.glob("dataset/labels/train/*.xml")
@@ -43,7 +21,7 @@ for i, xml_file in enumerate(xml_files):
 
     img_patterns = [
         f"dataset/images/train/**/{basename}.png",
-        f"dataset/images/train/**/{basename}.jpg"
+        f"dataset/images/train/**/{basename}.jpg",
     ]
 
     img_path = None

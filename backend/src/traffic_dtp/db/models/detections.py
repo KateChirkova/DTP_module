@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.traffic_dtp.db.session import Base
 
+# сырые детекции YOLO с одного кадра (привязка к accident после IoU)
 class Detection(Base):
     __tablename__ = "detections"
 

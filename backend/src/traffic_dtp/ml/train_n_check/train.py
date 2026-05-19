@@ -1,3 +1,4 @@
+# обучение YOLOv8 на dataset/data.yaml (локальный запуск из каталога ml)
 from ultralytics import YOLO
 
 model = YOLO("yolov8n.pt")

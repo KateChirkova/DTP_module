@@ -1,32 +1,55 @@
-import subprocess
+# YOLO: HTTP worker (Docker) или in-process (локально)
 import json
-import time
-from pathlib import Path
+import logging
+import os
+import urllib.error
+import urllib.request
 from typing import Dict
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-print(f"BASE_DIR: {BASE_DIR}")
+from src.traffic_dtp.services.paths import resolve_project_path
 
-ML_VENV_PYTHON = BASE_DIR / "backend" / "src" / "traffic_dtp" / "ml" / "venv-ml" / "Scripts" / "python.exe"
-YOLO_SCRIPT = BASE_DIR / "backend" / "src" / "traffic_dtp" / "services" / "yolo_predict.py"
+logger = logging.getLogger(__name__)
 
-print(f"ML: {ML_VENV_PYTHON.exists()}")
-print(f"Script: {YOLO_SCRIPT.exists()}")
+
+def _predict_inprocess(image_path: str) -> Dict:
+    from src.traffic_dtp.services.yolo_predict import predict_accident as run_predict
+
+    full_image = resolve_project_path(image_path)
+    logger.info("YOLO in-process: %s", full_image)
+    out = run_predict(str(full_image))
+    return out if isinstance(out, dict) else {"detections": []}
+
+
+def _predict_via_worker(base_url: str, image_path: str) -> Dict:
+    url = base_url.rstrip("/") + "/predict"
+    resolved = str(resolve_project_path(image_path))
+    payload = json.dumps({"path": resolved}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def warmup_yolo_model() -> None:
+    worker = os.getenv("YOLO_WORKER_URL", "").strip()
+    if worker:
+        return
+    from src.traffic_dtp.services.yolo_predict import get_model
+
+    get_model()
+    logger.info("YOLO model preloaded (in-process)")
 
 
 def predict_accident(image_path: str) -> Dict:
-    full_image = BASE_DIR / image_path
-    cmd = [str(ML_VENV_PYTHON), str(YOLO_SCRIPT), str(full_image)]
+    worker = os.getenv("YOLO_WORKER_URL", "").strip()
+    if worker:
+        try:
+            return _predict_via_worker(worker, image_path)
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError) as e:
+            logger.warning("YOLO worker (%s) недоступен: %s — in-process fallback", worker, e)
 
-    print(f"CMD: {' '.join(cmd)}")
-
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(BASE_DIR))
-
-    print(f"STDOUT: {result.stdout[:200]}...")
-    print(f"STDERR: {result.stderr[:200]}...")
-    print(f"Return code: {result.returncode}")
-
-    if result.returncode == 0 and result.stdout.strip():
-        return json.loads(result.stdout.strip())
-
-    return {"detections": []}
+    return _predict_inprocess(image_path)

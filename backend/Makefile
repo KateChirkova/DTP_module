@@ -16,13 +16,13 @@ init-db:
 status:
 	@echo "=== Traffic DTP Status ==="
 	@sqlite3 data/database.sqlite "SELECT COUNT(*) FROM accidents WHERE is_active=1" | tr -d '\n' && echo " active accidents"
-	@sqlite3 data/database.sqlite "SELECT COUNT(*) FROM notifications WHERE status='unread'" | tr -d '\n' && echo " unread notifications"
+	@sqlite3 data/database.sqlite "SELECT COUNT(*) FROM notifications n JOIN accidents a ON a.id=n.accident_id AND a.is_active=1" | tr -d '\n' && echo " active notifications"
 	@ls data/screenshots/ 2>/dev/null | wc -l | tr -d '\n' && echo " screenshots"
 	@curl -s "localhost:8080/health" | jq '.database.accidents.count' 2>/dev/null || echo "API down"
 
 test:
-	@echo "Unit tests"
-	pytest tests/ -v
+	@echo "Backend pytest (из корня репозитория: tests/backend, см. pytest.ini)"
+	cd .. && python -m pytest tests/backend -q
 
 test-api:
 	@echo "API test"
@@ -35,10 +35,10 @@ test-full:
 	make dev & sleep 3 && make test-api
 
 docker-up:
-	docker-compose up -d
+	cd .. && docker compose up -d --build
 
 docker-logs:
-	docker-compose logs -f
+	cd .. && docker compose logs -f
 
 clean:
 	rm -rf __pycache__ src/__pycache__ *.pyc data/*.log

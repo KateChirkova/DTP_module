@@ -1,6 +1,8 @@
+# in-process Ultralytics YOLO (веса в ml/runs/detect/...)
 import json
+import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from ultralytics import YOLO
 
@@ -8,6 +10,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "ml" / "runs" / "detect" / "dtp_krasnodar_light9" / "weights" / "best.pt"
 
 _model = None
+
+
+def _predict_kwargs() -> dict:
+    kwargs: dict = {"verbose": False}
+    if raw := os.getenv("YOLO_IMGSZ", "640").strip():
+        kwargs["imgsz"] = int(raw)
+    if raw := os.getenv("YOLO_CONF", "0.25").strip():
+        kwargs["conf"] = float(raw)
+    device = os.getenv("YOLO_DEVICE", "").strip()
+    if device:
+        kwargs["device"] = device
+    return kwargs
+
 
 def get_model() -> YOLO:
     global _model
@@ -17,6 +32,7 @@ def get_model() -> YOLO:
         _model = YOLO(str(MODEL_PATH))
     return _model
 
+
 def predict_accident(image_path: str) -> Dict:
     img_path = Path(image_path).resolve()
 
@@ -24,7 +40,7 @@ def predict_accident(image_path: str) -> Dict:
         raise FileNotFoundError(f"Изображение не найдено: {img_path}")
 
     model = get_model()
-    results = model.predict(source=str(img_path), verbose=False)[0]
+    results = model.predict(source=str(img_path), **_predict_kwargs())[0]
 
     detections: List[Dict] = []
     if results.boxes is not None:
@@ -44,6 +60,7 @@ def predict_accident(image_path: str) -> Dict:
         "total_detections": len(detections),
         "detections": detections,
     }
+
 
 if __name__ == "__main__":
     import argparse

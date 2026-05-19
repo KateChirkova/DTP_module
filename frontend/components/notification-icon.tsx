@@ -1,23 +1,29 @@
 "use client"
 
+// FAB на карте: счётчик непрочитанных + drawer
 import { AlertTriangle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { NotificationDrawer } from "@/components/notification-drawer"
 import { useNotifications } from "@/hooks/use-notifications"
 
 export function NotificationIcon() {
-  const { unreadCount, refresh } = useNotifications()
+  const { notifications, unreadCount, isLoading, markRead, markAllRead, refresh } = useNotifications()
 
   return (
     <div className="dtp-fab">
-      <NotificationDrawer refresh={refresh}>
+      <NotificationDrawer
+        notifications={notifications}
+        unreadCount={unreadCount}
+        isLoading={isLoading}
+        markRead={markRead}
+        markAllRead={markAllRead}
+        refresh={refresh}
+      >
         <button
           aria-label="Уведомления о ДТП"
           className="dtp-fab__button"
         >
-          <AlertTriangle
-            className="dtp-fab__icon"
-          />
+          <AlertTriangle width={28} height={28} className="dtp-fab__icon" aria-hidden />
 
           {unreadCount > 0 && (
             <Badge className="dtp-fab__badge">

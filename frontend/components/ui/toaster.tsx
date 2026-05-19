@@ -1,6 +1,9 @@
 "use client";
 
+// рендер очереди toast; регистрирует dismissAllToasts
+import { useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { registerToastDismiss } from "@/lib/ui-events"
 import {
   Toast,
   ToastClose,
@@ -11,10 +14,12 @@ import {
 } from "@/components/ui/toast"
 
 export function Toaster() {
-  const { toasts } = useToast()
+  const { toasts, dismiss } = useToast()
+
+  useEffect(() => registerToastDismiss(dismiss), [dismiss])
 
   return (
-    <ToastProvider>
+    <ToastProvider duration={30000}>
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
